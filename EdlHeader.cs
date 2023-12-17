@@ -2,57 +2,56 @@
 using System.IO;
 using System.Linq;
 
-namespace wdcossey
+namespace wdcossey;
+
+public partial class EdlCompress
 {
-    public partial class EdlCompress
+    public record EdlHeader
     {
-        public record EdlHeader
+        private static readonly char[] EdlHeaderIdentifier = { 'E', 'D', 'L' };
+
+        /// <summary>compression type 0-2</summary>
+        public int CompressionType { get; set; }
+
+        /// <summary>big(1) or little(0) endian</summary>
+        public EdlEndianType Endian { get; set; }
+
+        /// <summary>compressed size</summary>
+        public long CompressedSize { get; set; }
+
+        /// <summary>decompressed size</summary>
+        public long DecompressedSize { get; set; }
+
+        private static bool ValidateHeader(BinaryReader reader)
         {
-            private static readonly char[] EdlHeaderIdentifier = { 'E', 'D', 'L' };
+            var headerChars = reader.ReadChars(3);
+            return headerChars.SequenceEqual(EdlHeaderIdentifier);
+        }
 
-            /// <summary>compression type 0-2</summary>
-            public int CompressionType { get; set; }
+        public static EdlHeader Parse(BinaryReader reader)
+        {
+            if (!ValidateHeader(reader))
+                throw new InvalidOperationException("Does not contain a valid EDL header");
 
-            /// <summary>big(1) or little(0) endian</summary>
-            public EdlEndianType Endian { get; set; }
+            var compressionType = reader.ReadByte();
+            var endianType = (EdlEndianType)(compressionType >> 7);
 
-            /// <summary>compressed size</summary>
-            public long CompressedSize { get; set; }
+            var compressedSize = reader.ReadUInt32();
+            var decompressedSize = reader.ReadUInt32();
 
-            /// <summary>decompressed size</summary>
-            public long DecompressedSize { get; set; }
-
-            private static bool ValidateHeader(BinaryReader reader)
+            if (endianType == EdlEndianType.Big)
             {
-                var headerChars = reader.ReadChars(3);
-                return headerChars.SequenceEqual(EdlHeaderIdentifier);
+                compressedSize = ByteSwap(compressedSize);
+                decompressedSize = ByteSwap(decompressedSize);
             }
 
-            public static EdlHeader Parse(BinaryReader reader)
+            return new EdlHeader
             {
-                if (!ValidateHeader(reader))
-                    throw new InvalidOperationException("Does not contain a valid EDL header");
-
-                var compressionType = reader.ReadByte();
-                var endianType = (EdlEndianType)(compressionType >> 7);
-
-                var compressedSize = reader.ReadUInt32();
-                var decompressedSize = reader.ReadUInt32();
-
-                if (endianType == EdlEndianType.Big)
-                {
-                    compressedSize = ByteSwap(compressedSize);
-                    decompressedSize = ByteSwap(decompressedSize);
-                }
-
-                return new EdlHeader
-                {
-                    Endian = endianType,
-                    CompressionType = compressionType & 0xF,
-                    CompressedSize = Convert.ToInt64(compressedSize),
-                    DecompressedSize = Convert.ToInt64(decompressedSize),
-                };
-            }
+                Endian = endianType,
+                CompressionType = compressionType & 0xF,
+                CompressedSize = Convert.ToInt64(compressedSize),
+                DecompressedSize = Convert.ToInt64(decompressedSize),
+            };
         }
     }
 }
